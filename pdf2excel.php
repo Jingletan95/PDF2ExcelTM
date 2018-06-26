@@ -34,9 +34,6 @@ function isDate($date){
     }
 
     $temp= explode(".", $date);
-    //echo "**";
-    //echo $temp[0]."\t".$temp[1]."\t".$temp[2];
-    //echo "**\n";
     if(is_numeric($temp[0]) && is_numeric($temp[1]) && is_numeric($temp[2])){
 
       //echo $temp[0]."\t".$temp[1]."\t".$temp[2];
@@ -61,7 +58,6 @@ function isDate($date){
 //function to select the newest date
 function newestDate($dateArray){
   for ($i=0;$i<sizeof($dateArray); $i++){
-
     $dates[$i] = date( "d.m.Y", strtotime( $dateArray[$i] ) );
     //echo "NEWEST**: ".$dates[$i]."**";
   }
@@ -84,25 +80,67 @@ function mainConvert($filePath, $colNum, $colNameArray){
   // Creating a worksheet
   $worksheet =& $workbook->addWorksheet('TM Purchase Order');
 
-  // Editing the title
-  $col0 = "PO Number";
-  $col1 = "PO Date";
-  $col2 = "Contract No";
-  $col3 = "Payment Terms";
-  $col4 = "Project/Cost Center";
-  $col5 = "Tracking No";
-  $col6 = "Project Manager";
-  $col7 = "Contact Person";
-  $col8 = "Contact No";
-  $col9 = "Delivery Date";
-  $col10 = "Total Amount (RM)";
+  //set date format
+  $date_format = $workbook->addFormat(array('size'=>9,
+  'align'=>'left'));
+  $date_format ->setNumFormat('MM/DD/YYYY');
 
-  //set column width
-  $worksheet->setColumn(0,$colNum-1,20);
+  //set text Format
+  $columnTitleFormat = $workbook->addFormat(array('bold'=>1,
+  'top'=>1,
+  'bottom'=>1 ,
+  'size'=>10,
+  'FgColor' => 'cyan'));
+
+  $regularFormat = $workbook->addFormat(array('size'=>9,
+  'align'=>'left'));
+
 
   //set column title
   for ($i = 0; $i<$colNum; $i++){
-    $worksheet->write(0, $i, $colNameArray[$i]);
+    $worksheet->write(0, $i, $colNameArray[$i],$columnTitleFormat);
+
+
+    //set width according to columnName
+    if ($colNameArray[$i] == "PO Number"){
+      //echo $i;
+      $worksheet->setColumn($i,$i,12);
+    }else if ($colNameArray[$i] == "PO Date"){
+        $worksheet->setColumn($i,$i,10.8);
+      }
+    else if ($colNameArray[$i] == "Contract No"){
+        $worksheet->setColumn($i,$i,11);
+      }
+    else if ($colNameArray[$i] == "Payment Terms"){
+        $worksheet->setColumn($i,$i,28);
+      }
+      else if ($colNameArray[$i] == "Incoterms"){
+          $worksheet->setColumn($i,$i,24.6);
+        }
+    else if ($colNameArray[$i] == "Project"){
+        $worksheet->setColumn($i,$i,13.3);
+      }
+    else if ($colNameArray[$i] == "Cost Center"){
+          $worksheet->setColumn($i,$i,44);
+      }
+    else if ($colNameArray[$i] == "Tracking No"){
+        $worksheet->setColumn($i,$i,11);
+      }
+    else if ($colNameArray[$i] == "Project Manager"){
+        $worksheet->setColumn($i,$i,30);
+      }
+    else if ($colNameArray[$i] == "Contact Person"){
+        $worksheet->setColumn($i,$i,30);
+      }
+    else if ($colNameArray[$i] == "Contact No"){
+        $worksheet->setColumn($i,$i,13);
+      }
+    else if ($colNameArray[$i] == "Delivery Date"){
+        $worksheet->setColumn($i,$i,12);
+      }
+    else {
+        $worksheet->setColumn($i,$i,12);
+      }
   }
   //**************************************************************
 
@@ -116,6 +154,8 @@ function mainConvert($filePath, $colNum, $colNameArray){
     $pages = $pdf->getPages();
 
     //Loop over each page to extract text
+    $array = []; //initialise array
+    $deliDate = [];
     $countPage = 1;
     $deliIndex = 0;
     foreach($pages as $page){
@@ -123,69 +163,108 @@ function mainConvert($filePath, $colNum, $colNameArray){
     //echo $text;
 
     //Only extract the info once
-    echo "count page: ".$countPage;
+    //echo "count page: ".$countPage;
     if($countPage == 1){
       //Extract information
       //PO NUMBER extraction:
       $pos = strpos($text,"PO Number :");
       $start = $pos + 12;
       $PONumber = getInformationString($start, $text);
-      echo $PONumber;
-      //echo "\n";
+
       //PO DATE extraction
       $pos = strpos($text,"PO Date :");
       $start = $pos + 10;
       $PODate = getInformationString($start, $text);
-      echo $PODate;
+      $PODate = date("m/d/Y",strtotime($PODate));
+
       //Contract No extraction
       $pos = strpos($text,"Contract No :");
       $start = $pos + 14;
       $ContractNo = getInformationString($start, $text);
-      echo $ContractNo;
+
       //Payment Terms extraction
       $pos = strpos($text,"Payment Terms :");
       $start = $pos + 16;
       $PayTerms = getInformationString($start, $text);
-      echo $PayTerms;
+
+      //Incoterms extraction
+      $pos = strpos($text,"Incoterms :");
+      $start = $pos + 12;
+      $Incoterms = getInformationString($start, $text);
+
       //Project/Cost Center extraction
       $pos = strpos($text,"Project/Cost Center :");
       $start = $pos + 22;
-      $ProjCostCenter = getInformationString($start, $text);
-      echo $ProjCostCenter;
+      //special case because might elongate to next row
+      $estimatedLen = 100;
+      $tempStr = substr($text, $start, $estimatedLen);
+      $back = strpos($tempStr, "Tracking No :");
+      $ProjCostCenter = substr($tempStr, 0,$back);
+      $ProjCostCenter = str_replace("\n"," ",$ProjCostCenter);
+      //separation of project & Cost Center
+      if(strpos($ProjCostCenter," ") == true){
+        $next = strpos($ProjCostCenter," ") + 1;
+        $Project = substr($ProjCostCenter,0,strpos($ProjCostCenter, " "));
+        $Project = trim($Project);
+        $len = strlen($ProjCostCenter) - $next;
+        $CostCenter = substr($ProjCostCenter, $next,$len );
+        $CostCenter = trim($CostCenter);
+      }else {
+        //only got Project
+        $Project = trim($ProjCostCenter);
+        $CostCenter = "";
+      }
+
       //Tracking No extraction
       $pos = strpos($text,"Tracking No :");
       $start = $pos + 14;
       $TrackingNo = getInformationString($start, $text);
-      echo $TrackingNo;
+
       //Project Manager extraction
       $pos = strpos($text,"Project Manager :");
       $start = $pos + 18;
-      $ProjectManager = getInformationString($start, $text);
-      echo $ProjectManager;
+      //special case because might elongate to next row
+      $estimatedLen = 100;
+      $tempStr = substr($text, $start, $estimatedLen);
+      $back = strpos($tempStr, "Contact Person  :");
+      $ProjectManager = substr($tempStr, 0,$back);
+      $ProjectManager = str_replace("\n"," ",$ProjectManager);
+      $ProjectManager = str_replace("  "," ",$ProjectManager);
+      if(strpos($ProjectManager,"-") == true){
+        $temp= explode("-", $ProjectManager);
+        $ProjectManager = $temp[1];
+      }
+
       //Contact Person extraction
       $pos = strpos($text,"Contact Person  :");
       $start = $pos + 18;
-      $ContactPerson = getInformationString($start, $text);
-      echo $ContactPerson;
+      //special case because might elongate to next row
+      $estimatedLen = 100;
+      $tempStr = substr($text, $start, $estimatedLen);
+      $back = strpos($tempStr, "Contact No     :");
+      $ContactPerson = substr($tempStr, 0,$back);
+      $ContactPerson = str_replace("\n"," ",$ContactPerson);
+      $ContactPerson = str_replace("  "," ",$ContactPerson);
+
       //Contact No extraction
       $pos = strpos($text,"Contact No     :");
       $start = $pos + 17;
       $ContactNo = getInformationString($start, $text);
-      echo "&&&&&&: ".$ContactNo."&&";
       for ($i = 0; $i <strlen($ContactNo); $i++){
         if($ContactNo[0] == '+'){
-          if(!is_numeric($ContactNo[$i+1])){
+          if(is_numeric($ContactNo[$i+1]) || $ContactNo[$i+1] == '-' || $ContactNo[$i+1] == ' '){
+          }else{
             $i++;
             break;
           }
         }else{
-          if(!is_numeric($ContactNo[$i])){
+          if(is_numeric($ContactNo[$i]) || $ContactNo[$i] == '-' || $ContactNo[$i] == ' '){
+          }else{
             break;
           }
         }
       }
       $ContactNo = substr($ContactNo,0,$i);
-      echo $ContactNo;
     }
 
     //Total Amount extraction
@@ -194,15 +273,24 @@ function mainConvert($filePath, $colNum, $colNameArray){
       $pos = strpos($text,"Total Amount   MYR   :");
       $start = $pos + 24;
       $TotalAmount = getInformationString($start, $text);
-      echo "\n";
-      echo $TotalAmount;
+      $TotalAmount = trim($TotalAmount);
+      //echo "\n";
+      //echo $TotalAmount;
     }
 
+    //Subtotal extraction
+    //Only do extraction if keyword is found
+    if(strpos($text,"Subtotal") == true){
+      $pos = strpos($text,"Subtotal");
+      $start = $pos + 9;
+      $Subtotal = getInformationString($start, $text);
+      $Subtotal = trim($Subtotal);
+      //echo "\n";
+      //echo $TotalAmount;
+    }
 
     //Extract delivery date at every page
-
     //$pos = strpos($text,"The Item covers the following  services");
-
     //$endSectionPos = strpos($text,"Total Amount   MYR   :");
     $endSectionPos = strlen($text);
     $len = $endSectionPos - 0;
@@ -214,9 +302,9 @@ function mainConvert($filePath, $colNum, $colNameArray){
 
        if (isDate($array[$i]) == true) {
          $deliDate[$deliIndex] = $array[$i];
-         echo "correct: ".$deliIndex." ".$deliDate[$deliIndex];
+         //echo "correct: ".$deliIndex." ".$deliDate[$deliIndex];
          $deliIndex ++;
-         echo "\n";
+         //echo "\n";
        }
      }
      //testing..
@@ -225,53 +313,66 @@ function mainConvert($filePath, $colNum, $colNameArray){
      //$testDate[2]="3.3.2017";
      //$testDate[3]="11.1.2017";
 
-     //echo "DATE$$: ".$newDate.'$$';
-
      $countPage = $countPage + 1;
   }
+
   //get newest date from collected array of date
   $newDate = newestDate($deliDate);
+  $newDate = date("m/d/Y",strtotime($newDate));
+
   //write to excel
   for ($col =0;$col <$colNum; $col++){
     if ($colNameArray[$col] == "PO Number"){
-      $worksheet->write($row,$col, $PONumber);
+      $worksheet->write($row,$col, $PONumber,$regularFormat);
     }else if ($colNameArray[$col] == "PO Date"){
-        $worksheet->write($row,$col, $PODate);
+        $worksheet->write($row,$col, "=DATEVALUE(\"$PODate\")",$date_format);
       }
     else if ($colNameArray[$col] == "Contract No"){
-        $worksheet->write($row,$col, $ContractNo);
+        $worksheet->write($row,$col, $ContractNo,$regularFormat);
       }
     else if ($colNameArray[$col] == "Payment Terms"){
-        $worksheet->write($row,$col, $PayTerms);
+        $worksheet->write($row,$col, $PayTerms,$regularFormat);
       }
-    else if ($colNameArray[$col] == "Project/Cost Center"){
-        $worksheet->write($row,$col, $ProjCostCenter);
+    else if ($colNameArray[$col] == "Project"){
+        $worksheet->write($row,$col, $Project,$regularFormat);
+      }
+    else if($colNameArray[$col] == "Cost Center"){
+        $worksheet->write($row,$col, $CostCenter,$regularFormat);
       }
     else if ($colNameArray[$col] == "Tracking No"){
-        $worksheet->write($row,$col, $TrackingNo);
+        $worksheet->write($row,$col, $TrackingNo,$regularFormat);
       }
     else if ($colNameArray[$col] == "Project Manager"){
-        $worksheet->write($row,$col, $ProjectManager);
+        $worksheet->write($row,$col, $ProjectManager,$regularFormat);
       }
     else if ($colNameArray[$col] == "Contact Person"){
-        $worksheet->write($row,$col, $ContactPerson);
+        $worksheet->write($row,$col, $ContactPerson,$regularFormat);
       }
     else if ($colNameArray[$col] == "Contact No"){
-        $worksheet->write($row,$col, $ContactNo);
+        $worksheet->write($row,$col, $ContactNo,$regularFormat);
       }
     else if ($colNameArray[$col] == "Delivery Date"){
-        $worksheet->write($row,$col, $newDate);
+        $worksheet->write($row,$col, "=DATEVALUE(\"$newDate\")",$date_format);
+      }
+      else if($colNameArray[$col] == "Incoterms"){
+        $worksheet->write($row,$col, $Incoterms,$regularFormat);
+      }
+      else if($colNameArray[$col] == "Subtotal"){
+        $worksheet->write($row,$col, $Subtotal,$regularFormat);
       }
     else {
-        $worksheet->write($row,$col, $TotalAmount);
+        $worksheet->write($row,$col, $TotalAmount,$regularFormat);
       }
     }
 
   $row = $row + 1;
+  //echo "End of one file!<br>";
 }//close of fileLoop
   // Let's send the file
   $workbook->close();
 
   return true;
 }
+
+
 ?>
